@@ -1,0 +1,10 @@
+dq_project:
+  target: dev
+  outputs:
+    dev:
+      type: mysql
+      server: mysql
+      port: 3307
+      user: root
+      password: admin123!
+      schema: classicmodels

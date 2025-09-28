@@ -1,0 +1,10 @@
+database:
+  host: host.docker.internal
+  port: 3307
+  user: root
+  password: admin123!
+  database: classicmodels   # or hr depending on target schema
+
+app:
+  theme: light
+  navbar_color: "#1f77b4"

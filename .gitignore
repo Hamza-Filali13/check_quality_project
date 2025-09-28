@@ -1,0 +1,148 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Streamlit
+.streamlit/
+
+# Docker
+.dockerignore
+
+# Logs
+logs/
+*.log
+log/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# PostgreSQL data
+postgres/pgdata/
+pgdata/
+
+# Airflow
+airflow/logs/
+airflow/dbt_artifacts/target/
+airflow/dbt_artifacts/logs/
+airflow/dbt_artifacts/dbt_packages/
+
+# dbt
+dbt/logs/
+dbt/dq_dbt_project/logs/
+dbt/dq_dbt_project/target/
+dbt/dq_dbt_project/dbt_packages/
+target/
+dbt_packages/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# Credentials and secrets
+credentials.yml
+secrets.yml
+.env.local
+.env.production
+
+# Monitoring data
+monitoring/prometheus/data/
+monitoring/grafana/data/
+
+# IDE specific
+.qodo/
+
+# Node modules (if any)
+node_modules/
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# MacOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Configuration overrides (keep templates, ignore actual configs)
+**/config/local_*.yml
+**/config/prod_*.yml
+streamlit_app/config/credentials.yml

@@ -1,0 +1,27 @@
+version: 2
+
+sources:
+  - name: classicmodels
+    database: classicmodels
+    schema: classicmodels
+    tables:
+      - name: customers
+      - name: employees
+      - name: offices
+      - name : orderdetails
+      - name : orders
+      - name : payments
+      - name : productlines
+      - name : products
+
+  - name: hr
+    database: hr
+    schema: hr
+    tables:
+      - name: countries
+      - name: departments
+      - name: dependents
+      - name : regions
+      - name : locations
+      - name : jobs
+      - name : employees

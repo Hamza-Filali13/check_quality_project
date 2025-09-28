@@ -1,0 +1,20 @@
+check_quality:
+  target: dev
+  outputs:
+    dev:
+      type: mysql
+      host: host.docker.internal   # Connects to your local machine
+      port: 3307                   # Your local MySQL port
+      user: root
+      password: admin123!
+      schema: classicmodels        # Schema in your local DB
+      database: classicmodels
+
+    hr:
+      type: mysql
+      host: host.docker.internal   # Connects to your local machine
+      port: 3307                   # Your local MySQL port    
+      user: root  
+      password: admin123!
+      schema: hr                   # Schema in your local DB
+      database: hr

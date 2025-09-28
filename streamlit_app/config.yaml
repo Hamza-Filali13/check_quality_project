@@ -1,0 +1,143 @@
+# Data Quality Dashboard Configuration
+
+# Database Configuration
+database:
+  host: ${POSTGRES_HOST:postgres}
+  port: ${POSTGRES_PORT:5432}
+  name: ${POSTGRES_DB:dq_db}
+  user: ${POSTGRES_USER:postgres}
+  password: ${POSTGRES_PASSWORD:postgres}
+
+# Airflow Configuration
+airflow:
+  host: ${AIRFLOW_HOST:localhost}
+  port: ${AIRFLOW_PORT:8080}
+  username: ${AIRFLOW_USERNAME:airflow}
+  password: ${AIRFLOW_PASSWORD:airflow}
+  dag_id: dbt_build_dag
+
+# Dashboard Configuration
+dashboard:
+  title: "Data Quality Dashboard"
+  page_icon: "📊"
+  layout: "wide"
+  auto_refresh_interval: 30  # seconds
+  
+# Data Quality Thresholds
+thresholds:
+  completeness:
+    excellent: 95
+    good: 90
+    fair: 80
+    poor: 70
+  uniqueness:
+    excellent: 95
+    good: 90
+    fair: 80
+    poor: 70
+  overall_score:
+    excellent: 90
+    good: 80
+    fair: 70
+    poor: 60
+
+# Domains Configuration
+domains:
+  hr:
+    name: "Human Resources"
+    color: "#1f77b4"
+    tables:
+      - "hr.employees"
+    key_metrics:
+      - "completeness"
+      - "uniqueness"
+      - "validity"
+  
+  finance:
+    name: "Finance"
+    color: "#ff7f0e"
+    tables:
+      - "finance.transactions"
+    key_metrics:
+      - "completeness"
+      - "accuracy"
+      - "consistency"
+  
+  sales:
+    name: "Sales"
+    color: "#2ca02c"
+    tables:
+      - "sales.orders"
+    key_metrics:
+      - "completeness"
+      - "timeliness"
+      - "validity"
+
+# Test Configuration
+tests:
+  types:
+    - name: "completeness"
+      description: "Checks for missing or null values"
+      severity: "high"
+    - name: "uniqueness"
+      description: "Checks for duplicate values"
+      severity: "medium"
+    - name: "validity"
+      description: "Checks data format and constraints"
+      severity: "high"
+    - name: "consistency"
+      description: "Checks cross-table consistency"
+      severity: "medium"
+    - name: "accuracy"
+      description: "Checks data accuracy against reference"
+      severity: "high"
+    - name: "timeliness"
+      description: "Checks data freshness and timeliness"
+      severity: "low"
+
+# Alerting Configuration
+alerts:
+  enabled: true
+  channels:
+    - email
+    - slack
+  thresholds:
+    critical: 50  # Score below this triggers critical alert
+    warning: 70   # Score below this triggers warning alert
+  
+# Export Configuration
+export:
+  formats:
+    - csv
+    - excel
+    - json
+  max_records: 10000
+
+# UI Configuration
+ui:
+  theme: "light"
+  # sidebar_width: 300
+  chart_height: 400
+  table_height: 500
+  colors:
+    primary: "#1f4e79"
+    secondary: "#2d5aa0"
+    success: "#28a745"
+    warning: "#ffc107"
+    danger: "#dc3545"
+    info: "#17a2b8"
+
+# Security Configuration
+security:
+  session_timeout: 3600  # seconds
+  max_login_attempts: 3
+  password_min_length: 8
+  require_https: false  # Set to true in production
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "dq_dashboard.log"
+  max_size: "10MB"
+  backup_count: 5

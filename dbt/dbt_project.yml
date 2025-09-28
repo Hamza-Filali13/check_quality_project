@@ -1,0 +1,166 @@
+
+# Name your project! Project names should contain only lowercase characters
+# and underscores. A good package name should reflect your organization's
+# name or the intended use of these models
+name: 'check_quality'
+version: '1.0.0'
+
+# This setting configures which "profile" dbt uses for this project.
+profile: 'check_quality'
+
+# These configurations specify where dbt should look for different types of files.
+# The `model-paths` config, for example, states that models in this project can be
+# found in the "models/" directory. You probably won't need to change these!
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:         # directories to be removed by `dbt clean`
+  - "target"
+  - "dbt_packages"
+
+
+# Configuring models
+# Full documentation: https://docs.getdbt.com/docs/configuring-models
+
+# In this example config, we tell dbt to build all models in the example/
+# directory as views. These settings can be overridden in the individual model
+# files using the `{{ config(...) }}` macro.
+models:
+  check_quality:
+    # Config indicated by + and applies to all files under models/example/
+    example:
+      +materialized: view
+
+vars:
+  kpi_tables:
+    - name: customers
+      schema: classicmodels
+      domain: sales
+      columns:
+        - column: customerNumber
+          checks: ['null', 'uniqueness', 'validity']
+          validity_rule: "customerNumber > 0"
+          null_description: "Customer number is mandatory and cannot be missing"
+          uniqueness_description: "Each customer must have a unique identifier"
+          validity_description: "Customer number must be a positive integer"
+
+        - column: state
+          checks: ['null', 'domain', 'accuracy']
+          domain_values: ['CA','NY','TX','FL']
+          accuracy_rule: "LENGTH(state) = 2"
+          null_description: "State field is required for all customers"
+          domain_description: "State must be one of the supported US states: CA, NY, TX, FL"
+          accuracy_description: "State code must be exactly 2 characters long"
+
+    - name: employees
+      schema: classicmodels
+      domain: sales
+      columns:
+        - column: employeeNumber
+          checks: ['null', 'uniqueness', 'validity']
+          validity_rule: "employeeNumber > 0"
+          null_description: "Employee number is mandatory"
+          uniqueness_description: "Each employee must have a unique ID"
+          validity_description: "Employee number must be positive"
+
+        - column: reportsTo
+          checks: ['foreign_key', 'null', 'uniqueness', 'consistency']
+          foreign_table: employees
+          foreign_column: employeeNumber
+          consistency_rule: "employeeNumber != reportsTo"
+          foreign_key_description: "Manager ID must exist in the employees table"
+          null_description: "Reporting structure can be null for top-level executives"
+          uniqueness_description: "Each employee reports to only one manager"
+          consistency_description: "Employees cannot report to themselves"
+
+        - column: email
+          checks: ['null', 'threshold', 'uniqueness', 'regex', 'accuracy']
+          threshold: 5
+          regex_pattern: "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+          accuracy_rule: "email LIKE '%.com' OR email LIKE '%.org'"
+          null_description: "Email is required for all employees"
+          threshold_description: "Maximum 5 percent of employees can have missing email addresses"
+          uniqueness_description: "Each employee must have a unique email address"
+          regex_description: "Email must follow standard email format (user@domain.extension)"
+          accuracy_description: "Only .com and .org email domains are allowed"
+
+        - column: jobTitle
+          checks: ['consistency', 'validity']
+          consistency_rule: "jobTitle NOT LIKE '%Manager%' OR reportsTo IS NOT NULL"
+          validity_rule: "jobTitle <> ''"
+          consistency_description: "Employees with Manager in title must report to someone"
+          validity_description: "Job title cannot be empty or blank"
+
+    - name: orders
+      schema: classicmodels
+      domain: sales
+      columns:
+        - column: orderNumber
+          checks: ['null', 'uniqueness', 'validity']
+          validity_rule: "orderNumber > 0"
+          null_description: "Order number is mandatory for all orders"
+          uniqueness_description: "Each order must have a unique order number"
+          validity_description: "Order number must be a positive integer"
+
+        - column: orderDate
+          checks: ['null', 'validity']
+          validity_rule: "orderDate <= CURRENT_DATE"
+          null_description: "Order date is required"
+          validity_description: "Order date cannot be in the future"
+
+        - column: requiredDate
+          checks: ['null', 'consistency', 'accuracy']
+          consistency_rule: "requiredDate >= orderDate"
+          accuracy_rule: "DATEDIFF(requiredDate, orderDate) <= 60"
+          null_description: "Required delivery date must be specified"
+          consistency_description: "Required date must be on or after order date"
+          accuracy_description: "Delivery timeframe cannot exceed 60 days"
+
+    - name: countries
+      schema: hr
+      domain: hr
+      columns:
+        - column: region_id
+          checks: ['null', 'uniqueness', 'validity']
+          validity_rule: "region_id > 0"
+          null_description: "Region ID is mandatory for all countries"
+          uniqueness_description: "Each country must belong to a unique region"
+          validity_description: "Region ID must be a positive number"
+
+    - name: departments
+      schema: hr
+      domain: hr
+      columns:
+        - column: department_id
+          checks: ['null', 'uniqueness']
+          null_description: "Department ID is required"
+          uniqueness_description: "Each department must have a unique identifier"
+
+        - column: location_id
+          checks: ['null', 'uniqueness', 'validity']
+          validity_rule: "location_id > 0"
+          null_description: "Location ID is mandatory for all departments"
+          uniqueness_description: "Each department must have a unique location"
+          validity_description: "Location ID must be positive"
+
+    - name: dependents
+      schema: hr
+      domain: hr
+      columns:
+        - column: dependent_id
+          checks: ['null', 'uniqueness']
+          null_description: "Dependent ID is required"
+          uniqueness_description: "Each dependent must have a unique identifier"
+
+        - column: employee_id
+          checks: ['foreign_key', 'null', 'validity']
+          foreign_table: employees
+          foreign_column: employee_id
+          validity_rule: "employee_id > 0"
+          foreign_key_description: "Employee ID must exist in the employees table"
+          null_description: "Employee ID is mandatory to link dependent to employee"
+          validity_description: "Employee ID must be a positive number"

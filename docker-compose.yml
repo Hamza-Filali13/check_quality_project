@@ -1,0 +1,110 @@
+version: "3.9"
+
+volumes:
+  grafana-storage:
+  dbt_artifacts:
+  airflow-data:
+
+services:
+
+  # -------------------
+  # Airflow
+  # -------------------
+  airflow:
+    image: apache/airflow:2.9.0
+    container_name: dq_airflow
+    restart: unless-stopped
+    user: root
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: mysql+mysqldb://root:admin123!@host.docker.internal:3307/classicmodels
+      AIRFLOW__CORE__FERNET_KEY: "e12NmD93-ouvM9ECnjkRsqn2da4caW_QMeNoAANIUuM="
+      AIRFLOW__WEBSERVER__SECRET_KEY: "supersecretkey"
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      DBT_PROFILES_DIR: /opt/airflow/dbt
+      DBT_DIR: /opt/airflow/dbt
+    volumes:
+      - ./dbt:/opt/airflow/dbt
+      - ./airflow/entrypoint.sh:/entrypoint.sh
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/dbt_artifacts:/opt/airflow/dbt_artifacts
+    entrypoint: ["/entrypoint.sh"]
+    ports:
+      - "8080:8080"
+    networks:
+      - dq_net
+
+  # -------------------
+  # dbt (connected to MySQL)
+  # -------------------
+  dbt:
+    image: ghcr.io/dbt-labs/dbt-core:latest
+    container_name: dq_dbt
+    volumes:
+      - ./dbt:/usr/app
+    working_dir: /usr/app
+    environment:
+      DBT_PROFILES_DIR: /usr/app
+    entrypoint: [ "sleep" ]
+    command: [ "infinity" ]
+    networks:
+      - dq_net
+
+  # -------------------
+  # Streamlit Dashboard
+  # -------------------
+  streamlit:
+    build: ./streamlit_app
+    container_name: dq_streamlit
+    environment:
+      APP_SECRET: "${APP_SECRET:-eYkH3Qxk5a2yX2hYwC6KcRk1S0m9e2m1b7yP7s1pA9I=}"
+    command: >
+              bash -c "pip install --no-cache-dir -r requirements.txt &&
+                      streamlit run app.py --server.port=8501 --server.address=0.0.0.0"
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./streamlit_app:/app
+    depends_on:
+      - airflow
+    networks:
+      - dq_net
+
+  # -------------------
+  # Prometheus
+  # -------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: dq_prometheus
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    ports:
+      - "9090:9090"
+    networks:
+      - dq_net
+    depends_on:
+      - airflow
+
+  # -------------------
+  # Grafana
+  # -------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: dq_grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    networks:
+      - dq_net
+    depends_on:
+      - prometheus
+
+networks:
+  dq_net:
+    driver: bridge
