@@ -9,7 +9,6 @@ import hmac
 import hashlib
 import streamlit as st
 import extra_streamlit_components as stx
-import yaml
 from typing import Optional, Dict, Any
 
 class SessionManager:
@@ -24,19 +23,43 @@ class SessionManager:
         self._initialize_session()
     
     def _load_credentials(self):
-        """Load credentials from YAML file"""
+        """Load credentials from Streamlit secrets"""
+        # First, try to load from secrets.toml
         try:
-            with open("config/credentials.yml") as f:
-                return yaml.safe_load(f)['users']
+            if hasattr(st, 'secrets') and 'users' in st.secrets:
+                users_dict = dict(st.secrets['users'])
+                if users_dict:  # Make sure it's not empty
+                    return users_dict
         except Exception as e:
-            st.error(f"Error loading credentials: {e}")
-            # Fallback to demo users if YAML fails
-            return {
-                "admin": {"name": "Admin User", "password": "admin", "domains": ["hr", "finance", "sales"]},
-                "hr_user": {"name": "HR User", "password": "password", "domains": ["hr"]},
-                "finance_user": {"name": "Finance User", "password": "password", "domains": ["finance"]},
-                "sales_user": {"name": "Sales User", "password": "password", "domains": ["sales"]}
+            # Only show warning in development, not production
+            if st.session_state.get('debug_mode', False):
+                st.warning(f"Could not load credentials from secrets: {e}")
+        
+        # Fallback to demo users - ALWAYS return a valid dictionary
+        fallback_users = {
+            "admin": {
+                "name": "Admin User", 
+                "password": "admin", 
+                "domains": ["hr", "finance", "sales"]
+            },
+            "hr_user": {
+                "name": "HR User", 
+                "password": "password", 
+                "domains": ["hr"]
+            },
+            "finance_user": {
+                "name": "Finance User", 
+                "password": "password", 
+                "domains": ["finance"]
+            },
+            "sales_user": {
+                "name": "Sales User", 
+                "password": "password", 
+                "domains": ["sales"]
             }
+        }
+        
+        return fallback_users
     
     @property
     def cookie_manager(self):

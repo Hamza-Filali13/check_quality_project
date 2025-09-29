@@ -3,11 +3,11 @@ from sqlalchemy import create_engine
 import yaml
 import os
 
-# # Load DB config from YAML or env
-# CONFIG_PATH = "config/settings.yml"
+# Load DB config from YAML or env
+CONFIG_PATH = "config/settings.yml"
 
-# with open(CONFIG_PATH, "r") as f:
-#     config = yaml.safe_load(f)
+with open(CONFIG_PATH, "r") as f:
+    config = yaml.safe_load(f)
 
 DB_CFG = config["database"]
 

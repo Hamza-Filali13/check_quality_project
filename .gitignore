@@ -146,3 +146,4 @@ Desktop.ini
 **/config/local_*.yml
 **/config/prod_*.yml
 streamlit_app/config/credentials.yml
+streamlit_app/.streamlit/secrets.toml
