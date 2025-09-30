@@ -1339,27 +1339,25 @@ def run():
         try:
             # Get trend data for the last 7 days vs previous 7 days
             trend_query = f"""
-            WITH recent_performance AS (
-                SELECT 
-                    AVG(global_score_weighted_by_columns) as recent_avg_score,
-                    COUNT(*) as recent_test_count
-                FROM global_kpi
-                WHERE execution_timestamp >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-            ),
-            previous_performance AS (
-                SELECT 
-                    AVG(global_score_weighted_by_columns) as previous_avg_score,
-                    COUNT(*) as previous_test_count
-                FROM global_kpi
-                WHERE execution_timestamp >= DATE_SUB(CURDATE(), INTERVAL 14 DAY)
-                AND execution_timestamp < DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-            )
             SELECT 
                 r.recent_avg_score,
                 p.previous_avg_score,
                 r.recent_test_count,
                 p.previous_test_count
-            FROM recent_performance r, previous_performance p
+            FROM 
+                (SELECT 
+                    AVG(global_score_weighted_by_columns) as recent_avg_score,
+                    COUNT(*) as recent_test_count
+                FROM global_kpi
+                WHERE execution_timestamp >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+                ) r,
+                (SELECT 
+                    AVG(global_score_weighted_by_columns) as previous_avg_score,
+                    COUNT(*) as previous_test_count
+                FROM global_kpi
+                WHERE execution_timestamp >= DATE_SUB(CURDATE(), INTERVAL 14 DAY)
+                    AND execution_timestamp < DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+                ) p
             """
             
             # Apply domain filtering for non-admin users
