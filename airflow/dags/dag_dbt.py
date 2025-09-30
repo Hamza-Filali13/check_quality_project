@@ -9,7 +9,8 @@ dbt_models = [
     "global_kpi",
     "column_kpi_failing",
     "columns_with_issues",
-    "failing_records"
+    "failing_records",
+    "dq_test_metadata"
 ]
 
 default_args = {
