@@ -17,7 +17,7 @@ services:
     user: root
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: mysql+mysqldb://sql8800675:dDPAwbBFk3@sql8.freesqldatabase.com:3307/sql8800675
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: mysql+mysqldb://sql8800675:dDPAwbBFk3@sql8.freesqldatabase.com:3306/sql8800675
       AIRFLOW__CORE__FERNET_KEY: "e12NmD93-ouvM9ECnjkRsqn2da4caW_QMeNoAANIUuM="
       AIRFLOW__WEBSERVER__SECRET_KEY: "supersecretkey"
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"

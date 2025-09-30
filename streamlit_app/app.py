@@ -107,7 +107,7 @@ session_manager.restore_session()
 def get_navigation_pages():
     """Get navigation pages based on authentication status (using original session variable)"""
     if st.session_state.get("allow_access", 0) == 1:
-        return ["Home", "Analytics", "DQ Tests", "Logout"]
+        return ["Home", "Analytics", "Logout"]
     else:
         return ["Login"]
 
@@ -171,7 +171,7 @@ def route_pages():
         return
     
     # Check authentication for protected pages (using original session variable)
-    if selected in ["Home", "Analytics", "DQ Tests"]:
+    if selected in ["Home", "Analytics"]:
         if st.session_state.get("allow_access", 0) != 1:
             st.error("🔒 Please log in to access this page")
             login_run()
@@ -184,8 +184,8 @@ def route_pages():
         home_run()
     elif selected == "Analytics":
         analytics_run()
-    elif selected == "DQ Tests":
-        dq_tests_run()
+    # elif selected == "DQ Tests":
+    #     dq_tests_run()
     elif selected == "Login" or not is_authenticated:
         login_run()
     else:
