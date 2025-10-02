@@ -213,7 +213,7 @@ def create_enhanced_alert_card(message, alert_type="info"):
 def get_historical_metrics(days_back, is_admin=False, user_domains=None):
     """Get historical metrics for comparison"""
     try:
-        # Get global metrics from specific historical point
+         # Get global metrics from specific historical point
         global_query = f"""
         SELECT 
             AVG(global_score_weighted_by_columns) as global_score,
@@ -229,7 +229,7 @@ def get_historical_metrics(days_back, is_admin=False, user_domains=None):
         )
         """
         
-        # Apply domain filtering for non-admin users
+        # CORRECT: Domain filter in WHERE clause, not after it
         if not is_admin and user_domains:
             domain_list = "','".join(user_domains)
             global_query += f" AND g1.domain IN ('{domain_list}')"
@@ -251,7 +251,7 @@ def get_historical_metrics(days_back, is_admin=False, user_domains=None):
                 'total_records': 0, 'last_execution': None
             }
         
-        # Get historical table metrics using your actual table structure
+        # Get historical table metrics
         table_query = f"""
         SELECT 
             domain,
@@ -268,7 +268,7 @@ def get_historical_metrics(days_back, is_admin=False, user_domains=None):
         )
         """
         
-        # Apply domain filtering for non-admin users
+        # CORRECT: Domain filter added to existing WHERE clause with AND
         if not is_admin and user_domains:
             domain_list = "','".join(user_domains)
             table_query += f" AND t1.domain IN ('{domain_list}')"
@@ -289,13 +289,24 @@ def get_historical_metrics(days_back, is_admin=False, user_domains=None):
             'domains': pd.DataFrame()
         }
 
-def get_test_metadata(db):
-    """Get test metadata from DBT-generated table"""
-    query = """
-    SELECT * FROM dq_test_metadata 
-    WHERE created_at = (SELECT MAX(created_at) FROM dq_test_metadata)
-    ORDER BY level, domain, table_name, column_name
-    """
+def get_test_metadata(db, execution_timestamp=None):
+    """Get test metadata from DBT-generated table, optionally filtered by timestamp"""
+    if execution_timestamp:
+        query = f"""
+        SELECT * FROM dq_test_metadata 
+        WHERE created_at = (
+            SELECT MAX(created_at) 
+            FROM dq_test_metadata 
+            WHERE created_at <= '{execution_timestamp}'
+        )
+        ORDER BY level, domain, table_name, column_name
+        """
+    else:
+        query = """
+        SELECT * FROM dq_test_metadata 
+        WHERE created_at = (SELECT MAX(created_at) FROM dq_test_metadata)
+        ORDER BY level, domain, table_name, column_name
+        """
     return db.run_query(query)
 
 def get_table_test_count(domain, table_name, metadata_df):
@@ -308,7 +319,7 @@ def get_table_test_count(domain, table_name, metadata_df):
     return int(table_meta.iloc[0]['total_tests']) if not table_meta.empty else 0
 
 def get_domain_test_totals(domain, metadata_df):
-    """Get total test counts for a domain"""
+    """Get total test counts for a domain from metadata"""
     domain_meta = metadata_df[
         (metadata_df['level'] == 'domain') & 
         (metadata_df['domain'] == domain)
@@ -322,6 +333,7 @@ def get_domain_test_totals(domain, metadata_df):
     return {'total_tests': 0, 'total_tables': 0, 'total_columns': 0}
 
 
+
 def run():
     """Enhanced Data Quality Dashboard Home Page with Modern Features"""
     
@@ -332,8 +344,21 @@ def run():
     
     # Get user info
     current_user = st.session_state.get("current_user", "Unknown")
+    user_id = st.session_state.get("user_id")
     is_admin = st.session_state.get("is_admin", False)
     user_domains = st.session_state.get("domains", [])
+
+    # Debug: Show what domains the user has access to
+    st.sidebar.write("**Your Access:**")
+    st.sidebar.write(f"User: {current_user}")
+    st.sidebar.write(f"Admin: {is_admin}")
+    st.sidebar.write(f"Domains: {', '.join(user_domains) if user_domains else 'None'}")
+
+    # If user has no domains and is not admin, show error
+    if not is_admin and not user_domains:
+        st.error("❌ You don't have access to any domains. Please contact your administrator.")
+        st.info("💡 Your administrator needs to grant you domain or table-level permissions.")
+        return
     
     # Enhanced page configuration with modern styling
     st.markdown("""
@@ -442,8 +467,14 @@ def run():
             FROM global_kpi
             GROUP BY domain
         ) g2 ON g1.domain = g2.domain AND g1.execution_timestamp = g2.latest_execution
-        ORDER BY g1.execution_timestamp DESC
         """
+        
+        # CORRECT: Apply domain filter BEFORE ORDER BY
+        if not is_admin and user_domains:
+            domain_list = "','".join(user_domains)
+            latest_global_query += f" WHERE g1.domain IN ('{domain_list}')"
+        
+        latest_global_query += " ORDER BY g1.execution_timestamp DESC"
         
         latest_table_query = """
         SELECT 
@@ -466,10 +497,16 @@ def run():
         ) t2 ON t1.domain = t2.domain 
             AND t1.table_name = t2.table_name 
             AND t1.execution_timestamp = t2.latest_execution
-        ORDER BY t1.execution_timestamp DESC
         """
         
-        df_global = db.run_query(latest_global_query)  # Note: change from execute_query to run_query
+        # CORRECT: Apply domain filter BEFORE ORDER BY
+        if not is_admin and user_domains:
+            domain_list = "','".join(user_domains)
+            latest_table_query += f" WHERE t1.domain IN ('{domain_list}')"
+        
+        latest_table_query += " ORDER BY t1.execution_timestamp DESC"
+            
+        df_global = db.run_query(latest_global_query)
         df_table = db.run_query(latest_table_query)
         
         # Check if data exists
@@ -771,10 +808,34 @@ def run():
 
     with col2:
         current_tables = total_tables
-        if not historical_metrics['domains'].empty:
-            historical_tables = historical_metrics['domains']['tables'].sum()  # Sum of tables across domains
-        else:
-            historical_tables = current_tables  # Fallback
+        
+        # Fix: Query actual count of distinct tables at historical point
+        try:
+            historical_tables_query = f"""
+            SELECT COUNT(DISTINCT table_name) as table_count
+            FROM table_kpi t1
+            WHERE t1.execution_timestamp = (
+                SELECT MAX(execution_timestamp) 
+                FROM table_kpi t2 
+                WHERE t2.execution_timestamp <= DATE_SUB(CURDATE(), INTERVAL {historical_days} DAY)
+            )
+            """
+            
+            # CORRECT: Add to existing WHERE with AND
+            if not is_admin and user_domains:
+                domain_list = "','".join(user_domains)
+                historical_tables_query += f" AND t1.domain IN ('{domain_list}')"
+            
+            historical_tables_result = db.run_query(historical_tables_query)
+            
+            if not historical_tables_result.empty:
+                historical_tables = int(historical_tables_result.iloc[0]['table_count'])
+            else:
+                historical_tables = current_tables
+        except Exception as e:
+            st.warning(f"Could not load historical tables count: {e}")
+            historical_tables = current_tables
+        
         st.markdown(create_comparison_card(
             "Tables Covered",
             str(current_tables),
@@ -785,10 +846,33 @@ def run():
 
     with col3:
         current_test_runs = total_test_runs
-        if not historical_metrics['domains'].empty:
-            historical_test_runs = historical_metrics['domains']['total_records'].sum()
-        else:
-            historical_test_runs = current_test_runs  # Fallback
+        
+        # Fix: Query actual count of test run records at historical point
+        try:
+            historical_test_runs_query = f"""
+            SELECT COUNT(*) as test_run_count
+            FROM table_kpi t1
+            WHERE t1.execution_timestamp = (
+                SELECT MAX(execution_timestamp) 
+                FROM table_kpi t2 
+                WHERE t2.execution_timestamp <= DATE_SUB(CURDATE(), INTERVAL {historical_days} DAY)
+            )
+            """
+            
+            if not is_admin and user_domains:
+                domain_list = "','".join(user_domains)
+                historical_test_runs_query += f" AND t1.domain IN ('{domain_list}')"
+            
+            historical_test_runs_result = db.run_query(historical_test_runs_query)
+            
+            if not historical_test_runs_result.empty:
+                historical_test_runs = int(historical_test_runs_result.iloc[0]['test_run_count'])
+            else:
+                historical_test_runs = current_test_runs
+        except Exception as e:
+            st.warning(f"Could not load historical test runs: {e}")
+            historical_test_runs = current_test_runs
+        
         st.markdown(create_comparison_card(
             "Test Runs",
             str(current_test_runs),
@@ -810,12 +894,40 @@ def run():
 
     with col5:
         current_pass_rate = pass_rate
-        # Fix: Calculate historical pass rate using same method as current
+        
+        # Calculate historical pass rate from actual table data
         if not historical_metrics['domains'].empty:
-            # Current method: (passing_tables / total_tables * 100)
-            historical_passing_tables = len(historical_metrics['domains'][historical_metrics['domains']['avg_score'] >= 80])
-            historical_total_tables = len(historical_metrics['domains'])
-            historical_pass_rate = (historical_passing_tables / historical_total_tables * 100) if historical_total_tables > 0 else 0
+            try:
+                # Query historical table scores to calculate pass rate properly
+                historical_table_query = f"""
+                SELECT 
+                    COUNT(*) as total_tables,
+                    SUM(CASE WHEN table_score >= 80 THEN 1 ELSE 0 END) as passing_tables
+                FROM table_kpi t1
+                WHERE t1.execution_timestamp = (
+                    SELECT MAX(execution_timestamp) 
+                    FROM table_kpi t2 
+                    WHERE t2.execution_timestamp <= DATE_SUB(CURDATE(), INTERVAL {historical_days} DAY)
+                )
+                """
+                
+                # Apply domain filtering for non-admin users
+                if not is_admin and user_domains:
+                    domain_list = "','".join(user_domains)
+                    historical_table_query += f" AND t1.domain IN ('{domain_list}')"
+                
+                historical_table_result = db.run_query(historical_table_query)
+                
+                if not historical_table_result.empty and historical_table_result.iloc[0]['total_tables'] > 0:
+                    hist_total = int(historical_table_result.iloc[0]['total_tables'])
+                    hist_passing = int(historical_table_result.iloc[0]['passing_tables'])
+                    historical_pass_rate = (hist_passing / hist_total * 100) if hist_total > 0 else 0
+                else:
+                    historical_pass_rate = current_pass_rate
+                    
+            except Exception as e:
+                st.warning(f"Could not calculate historical pass rate: {e}")
+                historical_pass_rate = current_pass_rate
         else:
             historical_pass_rate = current_pass_rate
         
@@ -826,6 +938,8 @@ def run():
             "Current vs Historical Average",
             "#dc2626" if current_pass_rate < 80 else "#059669"
         ), unsafe_allow_html=True)
+
+    # Replace the Domain Historical Comparison section (around line 460-600) with this fixed code:
 
     # Domain Historical Comparison
     if not historical_metrics['domains'].empty:
@@ -841,51 +955,127 @@ def run():
             if not historical_domain.empty:
                 hist_row = historical_domain.iloc[0]
                 
+                # ==================== SCORES ====================
                 current_score = current_domain_row['global_score']
                 historical_score = hist_row['avg_score']
-                delta = ((current_score - historical_score) / historical_score * 100) if historical_score > 0 else 0
-                delta_color = "#10b981" if delta >= 0 else "#ef4444"
-                delta_symbol = "↑" if delta >= 0 else "↓"
                 
-                # Get current domain table metrics
+                # Get historical execution timestamp for this domain
+                historical_execution_time = hist_row['last_execution']
+                
+                # ==================== TABLES ====================
                 current_domain_tables = latest_table[latest_table['domain'] == domain]
                 current_tables_count = len(current_domain_tables)
-                current_columns_count = current_domain_tables['num_columns'].sum()
                 
-                # Get historical domain metrics
-                historical_tables_count = int(hist_row['tables']) if 'tables' in hist_row and hist_row['tables'] else current_tables_count
-                historical_columns_count = int(hist_row['total_columns']) if 'total_columns' in hist_row and hist_row['total_columns'] else current_columns_count
+                try:
+                    hist_domain_tables_query = f"""
+                    SELECT COUNT(DISTINCT table_name) as table_count
+                    FROM table_kpi t1
+                    WHERE t1.domain = '{domain}'
+                    AND t1.execution_timestamp = (
+                        SELECT MAX(execution_timestamp) 
+                        FROM table_kpi t2 
+                        WHERE t2.execution_timestamp <= DATE_SUB(CURDATE(), INTERVAL {historical_days} DAY)
+                        AND t2.domain = '{domain}'
+                    )
+                    """
+                    hist_tables_result = db.run_query(hist_domain_tables_query)
+                    historical_tables_count = int(hist_tables_result.iloc[0]['table_count']) if not hist_tables_result.empty else current_tables_count
+                except:
+                    historical_tables_count = current_tables_count
                 
-                # Calculate test metrics for this domain
-                total_tests_domain = 0
-                passed_tests_domain = 0
-                failed_tests_domain = 0
+                # ==================== METADATA - CURRENT vs HISTORICAL ====================
+                current_metadata = test_metadata  # Already loaded
+                
+                try:
+                    historical_metadata = get_test_metadata(db, historical_execution_time)
+                except Exception as e:
+                    historical_metadata = current_metadata  # Fallback
+                
+                # ==================== TOTAL TESTS ====================
+                current_domain_totals = get_domain_test_totals(domain, current_metadata)
+                total_tests_domain = current_domain_totals['total_tests']
+                
+                historical_domain_totals = get_domain_test_totals(domain, historical_metadata)
+                historical_total_tests = historical_domain_totals['total_tests']
+                
+                # ==================== PASSED/FAILED TESTS - CURRENT ====================
+                current_passed_tests = 0
+                current_failed_tests = 0
                 
                 for _, table_row in current_domain_tables.iterrows():
                     table_name = table_row['table_name']
                     table_score = table_row['table_score']
-                    
-                    # Get actual test count from metadata
-                    table_tests = get_table_test_count(domain, table_name, test_metadata)
+                    table_tests = get_table_test_count(domain, table_name, current_metadata)
                     
                     table_passed = int((table_score / 100) * table_tests)
                     table_failed = table_tests - table_passed
                     
-                    total_tests_domain += table_tests
-                    passed_tests_domain += table_passed
-                    failed_tests_domain += table_failed
+                    current_passed_tests += table_passed
+                    current_failed_tests += table_failed
                 
-                # Calculate historical passed/failed tests
-                historical_passed = int(historical_score/100 * total_tests_domain) if total_tests_domain > 0 else 0
-                historical_failed = total_tests_domain - historical_passed
+                # ==================== PASSED/FAILED TESTS - HISTORICAL ====================
+                try:
+                    hist_domain_tests_query = f"""
+                    SELECT table_name, table_score
+                    FROM table_kpi t1
+                    WHERE t1.domain = '{domain}'
+                    AND t1.execution_timestamp = (
+                        SELECT MAX(execution_timestamp) 
+                        FROM table_kpi t2 
+                        WHERE t2.execution_timestamp <= DATE_SUB(CURDATE(), INTERVAL {historical_days} DAY)
+                        AND t2.domain = '{domain}'
+                    )
+                    """
+                    hist_domain_tests_result = db.run_query(hist_domain_tests_query)
+                    
+                    if not hist_domain_tests_result.empty:
+                        historical_passed = 0
+                        historical_failed = 0
+                        
+                        for _, hist_table_row in hist_domain_tests_result.iterrows():
+                            table_name = hist_table_row['table_name']
+                            hist_table_score = hist_table_row['table_score']
+                            table_tests = get_table_test_count(domain, table_name, historical_metadata)
+                            
+                            hist_table_passed = int((hist_table_score / 100) * table_tests)
+                            hist_table_failed = table_tests - hist_table_passed
+                            
+                            historical_passed += hist_table_passed
+                            historical_failed += hist_table_failed
+                    else:
+                        historical_passed = int((historical_score / 100) * historical_total_tests) if historical_total_tests > 0 else 0
+                        historical_failed = historical_total_tests - historical_passed
+                except:
+                    historical_passed = int((historical_score / 100) * historical_total_tests) if historical_total_tests > 0 else 0
+                    historical_failed = historical_total_tests - historical_passed
                 
-                # Create domain section header
+                # ==================== COLUMNS ====================
+                current_columns_count = int(current_domain_tables['num_columns'].sum())
+                
+                try:
+                    hist_domain_columns_query = f"""
+                    SELECT SUM(num_columns) as total_columns
+                    FROM table_kpi t1
+                    WHERE t1.domain = '{domain}'
+                    AND t1.execution_timestamp = (
+                        SELECT MAX(execution_timestamp) 
+                        FROM table_kpi t2 
+                        WHERE t2.execution_timestamp <= DATE_SUB(CURDATE(), INTERVAL {historical_days} DAY)
+                        AND t2.domain = '{domain}'
+                    )
+                    """
+                    hist_columns_result = db.run_query(hist_domain_columns_query)
+                    historical_columns_count = int(hist_columns_result.iloc[0]['total_columns']) if not hist_columns_result.empty and hist_columns_result.iloc[0]['total_columns'] else current_columns_count
+                except:
+                    historical_columns_count = current_columns_count
+                
+                # ==================== DISPLAY CARDS ====================
                 st.markdown(f"#### {domain.upper()} Domain - Historical Comparison")
                 
-                # Create horizontal comparison cards
                 col1, col2, col3, col4, col5, col6 = st.columns(6)
                 
                 with col1:
+                    delta_color = "#10b981" if current_score >= historical_score else "#ef4444"
                     st.markdown(create_comparison_card(
                         "Current Score",
                         f"{current_score:.1f}%",
@@ -907,15 +1097,15 @@ def run():
                     st.markdown(create_comparison_card(
                         "Total Tests",
                         str(total_tests_domain),
-                        str(total_tests_domain),  # Test configuration doesn't change historically
-                        f"vs {total_tests_domain}",
+                        str(historical_total_tests),
+                        f"vs {historical_total_tests}",
                         "#7c3aed"
                     ), unsafe_allow_html=True)
                 
                 with col4:
                     st.markdown(create_comparison_card(
                         "Passed",
-                        str(passed_tests_domain),
+                        str(current_passed_tests),
                         str(historical_passed),
                         f"vs {historical_passed}",
                         "#10b981"
@@ -924,7 +1114,7 @@ def run():
                 with col5:
                     st.markdown(create_comparison_card(
                         "Failed",
-                        str(failed_tests_domain),
+                        str(current_failed_tests),
                         str(historical_failed),
                         f"vs {historical_failed}",
                         "#ef4444"
@@ -939,7 +1129,7 @@ def run():
                         "#059669"
                     ), unsafe_allow_html=True)
                 
-                st.markdown("---")  # Separator between domains
+                st.markdown("---")
 
     # Dimension-Based Scoring Breakdown
     st.markdown('<div class="section-header">📊 Dimension-Based Scoring Breakdown</div>', unsafe_allow_html=True)
@@ -1039,7 +1229,7 @@ def run():
         if not historical_metrics['domains'].empty:
             st.markdown("#### 📊 Dimension Historical Comparison")
             
-            # Get actual historical dimension averages
+            # Fix: Get dimension scores from the specific historical point
             historical_dimension_query = f"""
             SELECT 
                 AVG(avg_completeness_score) as hist_completeness,
@@ -1047,15 +1237,18 @@ def run():
                 AVG(avg_consistency_score) as hist_consistency,
                 AVG(avg_validity_score) as hist_validity,
                 AVG(avg_accuracy_score) as hist_accuracy
-            FROM table_kpi
-            WHERE execution_timestamp >= DATE_SUB(CURDATE(), INTERVAL {historical_days} DAY)
-            AND execution_timestamp < CURDATE()
+            FROM table_kpi t1
+            WHERE t1.execution_timestamp = (
+                SELECT MAX(execution_timestamp) 
+                FROM table_kpi t2 
+                WHERE t2.execution_timestamp <= DATE_SUB(CURDATE(), INTERVAL {historical_days} DAY)
+            )
             """
             
-            # Apply domain filtering for non-admin users
+            # CORRECT: Add to existing WHERE with AND
             if not is_admin and user_domains:
                 domain_list = "','".join(user_domains)
-                historical_dimension_query += f" AND domain IN ('{domain_list}')"
+                historical_dimension_query += f" AND t1.domain IN ('{domain_list}')"
             
             try:
                 historical_dims = db.run_query(historical_dimension_query)
@@ -1202,8 +1395,8 @@ def run():
         st.markdown("**Quality Improvement Trajectory**")
         
         try:
-            # Get historical trend data for the last 30 days
-            trend_query = f"""
+             # Get historical trend data for the last 30 days
+            trend_query = """
             SELECT 
                 DATE(execution_timestamp) as test_date,
                 domain,
@@ -1212,7 +1405,7 @@ def run():
             WHERE execution_timestamp >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
             """
             
-            # Apply domain filtering for non-admin users
+            # CORRECT: Add to existing WHERE with AND
             if not is_admin and user_domains:
                 domain_list = "','".join(user_domains)
                 trend_query += f" AND domain IN ('{domain_list}')"
@@ -1337,6 +1530,12 @@ def run():
         # Quality Trend Analysis
         st.markdown("**📈 Quality Trend Analysis**")
         try:
+            # Build domain filter clause
+            domain_filter = ""
+            if not is_admin and user_domains:
+                domain_list = "','".join(user_domains)
+                domain_filter = f"AND domain IN ('{domain_list}')"
+            
             # Get trend data for the last 7 days vs previous 7 days
             trend_query = f"""
             SELECT 
@@ -1350,6 +1549,7 @@ def run():
                     COUNT(*) as recent_test_count
                 FROM global_kpi
                 WHERE execution_timestamp >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+                    {domain_filter}
                 ) r,
                 (SELECT 
                     AVG(global_score_weighted_by_columns) as previous_avg_score,
@@ -1357,17 +1557,9 @@ def run():
                 FROM global_kpi
                 WHERE execution_timestamp >= DATE_SUB(CURDATE(), INTERVAL 14 DAY)
                     AND execution_timestamp < DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+                    {domain_filter}
                 ) p
             """
-            
-            # Apply domain filtering for non-admin users
-            if not is_admin and user_domains:
-                domain_list = "','".join(user_domains)
-                # Add domain filter to both CTEs
-                trend_query = trend_query.replace(
-                    "FROM global_kpi", 
-                    f"FROM global_kpi WHERE domain IN ('{domain_list}') AND execution_timestamp"
-                )
             
             trend_df = db.run_query(trend_query)
             

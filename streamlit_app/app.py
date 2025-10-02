@@ -1,6 +1,7 @@
 import streamlit as st
 from streamlit_navigation_bar import st_navbar
-from session_manager import session_manager
+from session_manager import session_manager  # This already initializes everything
+
 # Import page functions
 from pages.home import run as home_run
 from pages.analytics import run as analytics_run
@@ -16,7 +17,7 @@ try:
         initial_sidebar_state="collapsed"
     )
 except Exception:
-    pass  # Ignore errors from set_page_config
+    pass
 
 # ---- Global Styling ----
 st.markdown("""
@@ -37,7 +38,7 @@ st.markdown("""
     /* App container */
     .stApp {
         overflow-x: hidden;
-        padding-top: 4rem !important; /* Space for navbar */
+        padding-top: 4rem !important;
     }
     
     /* Navigation bar styling */
@@ -100,14 +101,19 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---- Session Management ----
-# Try to restore session from cookie
+# Restore session from cookie (this replaces initialize_session)
 session_manager.restore_session()
 
 # ---- Navigation Setup ----
 def get_navigation_pages():
-    """Get navigation pages based on authentication status (using original session variable)"""
+    """Get navigation pages based on authentication status"""
     if st.session_state.get("allow_access", 0) == 1:
-        return ["Home", "Analytics", "Logout"]
+        pages = ["Home", "Analytics"]
+        # Add Admin page if user is admin
+        if st.session_state.get("is_admin", False):
+            pages.append("Admin")
+        pages.append("Logout")
+        return pages
     else:
         return ["Login"]
 
@@ -145,14 +151,12 @@ def handle_logout():
     """Handle logout action"""
     session_manager.logout()
     st.success("✅ Successfully logged out!")
-    st.balloons()  # Fun logout animation
-    # Don't call st.rerun() here - let the app naturally refresh
+    st.balloons()
 
 # ---- Render Navigation ----
 pages = get_navigation_pages()
 styles = get_navbar_styles()
 
-# Add navbar container div
 st.markdown('<div class="nav-container">', unsafe_allow_html=True)
 selected = st_navbar(
     pages,
@@ -170,22 +174,31 @@ def route_pages():
         handle_logout()
         return
     
-    # Check authentication for protected pages (using original session variable)
-    if selected in ["Home", "Analytics"]:
+    # Check authentication for protected pages
+    if selected in ["Home", "Analytics", "Admin"]:
         if st.session_state.get("allow_access", 0) != 1:
             st.error("🔒 Please log in to access this page")
             login_run()
             return
     
-    # Route to pages (using original session variable)
+    # Check admin access for Admin page
+    if selected == "Admin":
+        if not st.session_state.get("is_admin", False):
+            st.error("🔒 You don't have permission to access this page")
+            home_run()
+            return
+    
+    # Route to pages
     is_authenticated = st.session_state.get("allow_access", 0) == 1
     
     if selected == "Home" or (is_authenticated and selected is None):
         home_run()
     elif selected == "Analytics":
         analytics_run()
-    # elif selected == "DQ Tests":
-    #     dq_tests_run()
+    elif selected == "Admin":
+        # Import admin page
+        from pages.admin import show_admin_page
+        show_admin_page()
     elif selected == "Login" or not is_authenticated:
         login_run()
     else:
@@ -214,7 +227,7 @@ if st.session_state.get("allow_access", 0) == 1:
         </div>
         """.format(
             current_user,
-            "Administrator" if is_admin else ", ".join(domains).upper()
+            "Administrator" if is_admin else ", ".join(domains).upper() if domains else "No domains"
         ),
         unsafe_allow_html=True,
     )

@@ -1,9 +1,9 @@
 database:
-  host: sql8.freesqldatabase.com
-  port: 3306
-  user: sql8800675
-  password: dDPAwbBFk3
-  database: sql8800675   # or hr depending on target schema
+  host: host.docker.internal
+  port: 3307
+  user: root
+  password: admin123!
+  database: classicmodels   # or hr depending on target schema
 
 app:
   theme: light

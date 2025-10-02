@@ -1,5 +1,7 @@
 {{ config(
-    materialized='table'
+    materialized='incremental',
+    unique_key=['created_at', 'schema_name', 'domain'],
+    on_schema_change='append_new_columns'
 ) }}
 
 {% set kpi_tables = var('kpi_tables') %}
